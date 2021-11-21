@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Banking System</title>
+</head>
+<body>
+	<h1>$ Banking System $</h1>
+	<script type="text/javascript">
+		verify();
+
+		function Bank(bankName, bankCode){
+			this.bankName = bankName;
+			this.bankCode = bankCode;
+
+			this.accounts = [];
+			this.registerAccount = function(accountInfo){
+				this.accounts.push({info: accountInfo, balance: 0});
+			}
+		}
+
+		function ATM(initCurrency){
+			this.currency = initCurrency;
+			this.banks = [];
+
+			this.registerBank = function(bank){
+				this.banks.push(bank);
+			}
+
+			this.auth = function(authinfo){
+				return {
+					authinfo: authinfo,
+		        	operations:[],
+					
+					deposit: function(amount){
+						this.operations.push({type: 'deposit', amount: amount});
+					},
+
+					withdraw: function(amount){
+						this.operations.push({type: 'withdraw', amount: amount});
+					},
+
+					transferin: function(amount){
+						this.operations.push({type: 'transfer-in', amount: amount});
+					},
+
+					transferout: function(amount){
+						this.operations.push({type: 'transfer-out', amount: amount});
+					},
+
+					getBalance: function(){
+						this.operations.push({type: 'balance-view'});
+					},
+				}
+			}
+
+			this.currencyLeft = function()
+			{
+				return (this.currency);
+			}
+
+			this.commit = function(transaction){
+				var account = this.findAccount(transaction.authinfo);
+				if(account === null){
+					return {status: 'FAILURE'}
+				}
+				var result = {status: 'SUCCESS'}
+				var commitedOperations = []
+
+				for (let operation of transaction.operations){
+					commitedOperations.push(operation);
+					switch (operation.type){
+						case 'deposit':
+							account.balance += operation.amount;
+							this.currency += operation.amount;
+							break;
+						case 'withdraw':
+							account.balance -= operation.amount;
+							this.currency -= operation.amount;
+							break;
+						case 'transfer-in':
+							account.balance += operation.amount;
+							this.currency += operation.amount;
+							break;
+						case 'transfer-out':
+							account.balance -= operation.amount;
+							this.currency -= operation.amount;
+							break;
+						case 'balance-view':
+							result.data = account.balance;
+							break;
+					}
+					if(account.balance < 0 || this.currency < 0){
+						result.status = 'FAILURE';
+						break;
+					}
+				}
+
+				if(result.status === 'FAILURE'){
+					while(commitedOperations.length){
+						let undoOperation = commitedOperations.pop();
+						switch(undoOperation.type){
+						case 'deposit':
+							account.balance -= undoOperation.amount;
+							this.currency -= undoOperation.amount;
+							break;
+						case 'withdraw':
+							account.balance += undoOperation.amount;
+							this.currency += undoOperation.amount;
+							break;
+						case 'transfer-in':
+							amount.balance -= undoOperation.amount;
+							this.currency -= undoOperation.amount;
+							break;
+						case 'transfer-out':
+							account.balance += undoOperation.amount;
+							this.currency += undoOperation.amount;
+							break;
+						case 'balance-view':
+							delete result.data;
+							break;
+						}
+					}
+				}
+
+				return result;
+			}
+
+			this.findAccount = function(authinfo){
+				var bank = this.banks.reduce(function(acc, cur){
+					return (cur.bankCode === authinfo.bankCode) ? cur : acc
+				}, null);
+
+				return bank ? bank.accounts.reduce(function(acc, cur){
+					return(cur.info.code === authinfo.code && cur.info.password === authinfo.password) ? cur : acc
+				}, null) : null
+			}
+		}
+
+		function verify(){
+			var bankName = 'Standard Chartered';
+			var bankCode = 52;
+			var bank = new Bank(bankName, bankCode);
+
+			var accountInfo = {
+				name: 'John',
+				code: 113322,
+				password: 223333,
+
+				receiverName: 'Thomas',
+				receiverAccNo: 123456789,
+			}
+			bank.registerAccount(accountInfo);
+
+			var initCurrency = 1000
+			var atm = new ATM(initCurrency);
+			atm.registerBank(bank);
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				transaction.getBalance();
+				let result = atm.commit(transaction);
+				console.log(result.status === 'SUCCESS');
+				console.log(result.data === 0);
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				transaction.deposit(5600);
+				transaction.getBalance();
+				let result = atm.commit(transaction);
+				console.log(result.status === 'SUCCESS');
+				console.log(result.data === 5600);
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				transaction.withdraw(3000);
+				transaction.getBalance();
+				let result = atm.commit(transaction);
+				console.log(result.status === 'SUCCESS');
+				console.log(result.data === 2600);
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				transaction.transferin(2000);
+				transaction.getBalance();
+				let result = atm.commit(transaction);
+				console.log(result.status === 'SUCCESS');
+				console.log(result.data === 4600);
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				if (accountInfo.receiverAccNo === 123456789){
+					transaction.transferout(2000);
+					transaction.getBalance();
+					let result = atm.commit(transaction);
+					console.log(result.status === 'SUCCESS');
+					console.log(result.data === 2600);
+				}
+				else {
+					transaction.getBalance();
+					let result = atm.commit(transaction);
+					console.log(result.data === 4600);
+				}
+			}
+
+			if (accountInfo.receiverAccNo === 123456789){
+				console.log(atm.currencyLeft() === 3600);
+			}
+			else {
+				console.log(atm.currencyLeft() === 5600);
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 2233});
+				transaction.withdraw(3000);
+				transaction.getBalance();
+				let result = atm.commit(transaction);
+				console.log(result.status === 'FAILURE');
+				console.log(result.data === undefined);
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				transaction.withdraw(1000);
+				transaction.withdraw(1000);
+				transaction.withdraw(1000);
+				transaction.withdraw(1000);
+				transaction.withdraw(1000);
+				transaction.withdraw(1000);
+				transaction.withdraw(1000);
+				transaction.getBalance();
+				let result = atm.commit(transaction);
+				console.log(result.status === 'FAILURE');
+				console.log(result.data === undefined);
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				if (accountInfo.receiverAccNo === 123456789){
+					transaction.transferout(3000);
+					transaction.getBalance();
+					let result = atm.commit(transaction);
+					console.log(result.status === 'FAILURE');
+					console.log(result.data === undefined);
+				}
+				else {
+					let result = atm.commit(transaction);
+					console.log(result.data === undefined);
+				}
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 2233});
+				if (accountInfo.receiverAccNo === 123456789){
+					transaction.transferout(3000);
+					transaction.getBalance();
+					let result = atm.commit(transaction);
+					console.log(result.status === 'FAILURE');
+					console.log(result.data === undefined);
+				}
+				else {
+					let result = atm.commit(transaction);
+					console.log(result.data === undefined);
+				}
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				if (accountInfo.receiverAccNo === 123456789){
+					transaction.transferout(1000);
+					transaction.transferout(1000);
+					transaction.transferout(1000);
+					transaction.transferout(1000);
+					transaction.transferout(1000);
+					transaction.transferout(1000);
+					transaction.transferout(1000);
+					transaction.getBalance();
+					let result = atm.commit(transaction);
+					console.log(result.status === 'FAILURE');
+					console.log(result.data === undefined);
+				}
+				else {
+					let result = atm.commit(transaction);
+					console.log(result.data === undefined);
+				}
+			}
+
+			{
+				let transaction = atm.auth({bankCode: 52, code: 113322, password: 223333});
+				if (accountInfo.receiverAccNo === 123456789){
+					transaction.getBalance();
+					let result = atm.commit(transaction);
+					console.log(result.status === 'SUCCESS');
+					console.log(result.data === 2600);
+				}
+				else {
+					transaction.getBalance();
+					let result = atm.commit(transaction);
+					console.log(result.status === 'SUCCESS');
+					console.log(result.data === 4600);
+				}
+			}
+		}
+	</script>
+</body>
+</html>
